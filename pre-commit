@@ -1,0 +1,130 @@
+#!/usr/bin/php
+<?php
+/**
+ * @file
+ * If this file has an exit status other than 0, the commit will fail.
+ */
+ 
+// For each check, set to 1 to enable or 0 to disable.
+$check_unwanted_strings = 1;
+$check_grunt = 1;
+$check_gulp = 1;
+
+//////
+// There should be no reason to edit anything below this line.
+//////
+ 
+$diff = get_diff();
+ 
+// Disallows commit if git diff returns an error.
+if (diff_error($diff)) {
+  exit(1);
+}
+// Disallows commit if the diff contains an unwanted string.
+if ($check_unwanted_strings && contains_unwanted_string($diff)) {
+  exit(1);
+}
+// Disallows commit if grunt is running.
+if ($check_grunt && grunt_is_running()) {
+  exit(1);
+}
+// Disallows commit if gulp is running.
+if ($check_grunt && gulp_is_running()) {
+  exit(1);
+}
+exit(0);
+ 
+/**
+ * Returns the git diff as an array of lines.
+ */
+function get_diff() {
+  $return = 0;
+  $diff = array();
+  exec('git diff && git diff --staged', $diff, $return);
+  if ($return !== 0) {
+    $diff = array();
+  }
+  return $diff;
+}
+ 
+/**
+ * Checks for error in diff.
+ */
+function diff_error($diff) {
+  $return = 0;
+  if (empty($diff)) {
+    fwrite(STDOUT, "git diff returned an error. Commit aborted.\n");
+    $return = 1;
+  }
+  return $return;
+}
+ 
+/**
+ * Checks for unwanted strings.
+ */
+function contains_unwanted_string($diff) {
+  $return = 0;
+  $checks = array(
+    'dsm(',
+    'dpm(',
+    'sdpm(', // search_krumo
+    'dpr(',
+    'dprint_r(',
+    'db_queryd(',
+    'kpr(',
+    'kprint_r(',
+    'var_dump(',
+    'error_log(',
+    'drupal_debug(',
+    'temppp',
+    'console.log',
+    'debugger;',
+  );
+ 
+  foreach ($diff as $lineno => $line) {
+    // Skips the line if it's not an addition line.
+    if (substr($line, 0, 1) != '+') {
+      continue;
+    }
+    // Checks each line in the diff for unwanted strings.
+    foreach ($checks as $check) {
+      if (strstr($line, $check)) {
+        fwrite(STDOUT, "You were about to commit a $check)? \n");
+        fwrite(STDOUT, "Offending line in diff:\n");
+        fwrite(STDOUT, "Line: $lineno $line\n");
+        fwrite(STDOUT, "Commit aborted.\n");
+        $return = 1;
+        break 2;
+      }
+    }
+  }
+  return $return;
+}
+ 
+/**
+ * Checks if grunt is running.
+ */
+function grunt_is_running() {
+  $return = 0;
+  $output = array();
+  exec('killall -s "grunt" &> /dev/null && if [ $? -eq 0 ]; then echo 1; fi', $output);
+  if (!empty($output)) {
+    fwrite(STDOUT, "Commit aborted: Grunt is running. \n");
+    $return = 1;
+  }
+  return $return;
+}
+
+/**
+ * Checks if gulp is running.
+ */
+function gulp_is_running() {
+  $return = 0;
+  $output = array();
+  exec('killall -s "gulp" &> /dev/null && if [ $? -eq 0 ]; then echo 1; fi', $output);
+  if (!empty($output)) {
+    fwrite(STDOUT, "Commit aborted: Gulp is running. \n");
+    $return = 1;
+  }
+  return $return;
+}
